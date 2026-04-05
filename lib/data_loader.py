@@ -166,6 +166,33 @@ def load_industry_map() -> pd.DataFrame:
     return result
 
 
+@st.cache_data
+def get_quarterly_new_counts() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """按财报季度和公告季度统计每季度新增持仓记录数，截止最新"""
+    df = load_raw_data()
+    df['announce_q'] = df['公告日'].dt.to_period('Q')
+
+    # 按财报季度（报告期）统计
+    report_counts = df.groupby('report_q').agg(
+        持仓记录数=('股票代码', 'count'),
+        持仓股票数=('股票代码', 'nunique'),
+        持仓机构数=('股东名称', 'nunique'),
+    ).reset_index()
+    report_counts['季度'] = report_counts['report_q'].astype(str)
+    report_counts = report_counts.sort_values('report_q')
+
+    # 按公告季度（公告日）统计
+    announce_counts = df.groupby('announce_q').agg(
+        持仓记录数=('股票代码', 'count'),
+        持仓股票数=('股票代码', 'nunique'),
+        持仓机构数=('股东名称', 'nunique'),
+    ).reset_index()
+    announce_counts['季度'] = announce_counts['announce_q'].astype(str)
+    announce_counts = announce_counts.sort_values('announce_q')
+
+    return report_counts, announce_counts
+
+
 def get_quarter_pairs() -> list[tuple[str, str]]:
     """返回所有有效季度对 [(prev_q, latest_q), ...]，最新的在前"""
     quarters = get_valid_quarters()

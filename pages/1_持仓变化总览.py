@@ -4,10 +4,11 @@
 
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import sys, os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from lib.data_loader import get_quarter_pairs, compute_quarter_change
+from lib.data_loader import get_quarter_pairs, compute_quarter_change, get_quarterly_new_counts
 
 st.title("持仓变化总览")
 
@@ -119,3 +120,33 @@ with st.expander(f"退出股票 ({len(exited)} 只)", expanded=False):
         use_container_width=True,
         hide_index=True,
     )
+
+# --- 季度趋势图 ---
+st.divider()
+st.subheader("季度持仓趋势")
+
+report_counts, announce_counts = get_quarterly_new_counts()
+
+col_left, col_right = st.columns(2)
+
+with col_left:
+    fig_report = px.bar(
+        report_counts, x='季度', y='持仓股票数',
+        title='按财报季度（报告期）',
+        labels={'持仓股票数': '持仓股票数', '季度': '财报季度'},
+        text='持仓股票数',
+    )
+    fig_report.update_traces(textposition='outside', textfont_size=9)
+    fig_report.update_layout(xaxis_tickangle=-45, height=400, margin=dict(t=40, b=80))
+    st.plotly_chart(fig_report, use_container_width=True)
+
+with col_right:
+    fig_announce = px.bar(
+        announce_counts, x='季度', y='持仓股票数',
+        title='按公告季度（公告日）',
+        labels={'持仓股票数': '持仓股票数', '季度': '公告季度'},
+        text='持仓股票数',
+    )
+    fig_announce.update_traces(textposition='outside', textfont_size=9)
+    fig_announce.update_layout(xaxis_tickangle=-45, height=400, margin=dict(t=40, b=80))
+    st.plotly_chart(fig_announce, use_container_width=True)
