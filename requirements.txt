@@ -1,0 +1,8 @@
+pandas
+numpy
+selenium
+webdriver-manager
+akshare
+backtrader
+quantstats
+tqdm
