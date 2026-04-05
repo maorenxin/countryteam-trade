@@ -638,19 +638,17 @@ def generate_quarterly_statistics(data_file: str = os.path.join(PROJECT_ROOT, 'd
         logger.error(f"生成季度统计文件失败: {e}")
 
 if __name__ == "__main__":
-    """主函数"""    
+    """主函数"""
     try:
-        # # 创建爬虫实例
-        # crawler = SeleniumStockHolderCrawler(
-        #     headless=False,  # 设置为False可以查看浏览器操作
-        #     delay_min=1.0,
-        #     delay_max=3.0,
-        #     timeout=30
-        # )
-        # #crawler.crawl_all_companies()
-        # crawler.crawl_single_company(hd_code='70413155', url='https://data.eastmoney.com/gdfx/ShareHolderDetail.html?hdCode=70413155', output_file='selenium_country_team_stock.csv')
+        # 创建爬虫实例
+        crawler = SeleniumStockHolderCrawler(
+            headless=True,
+            delay_min=1.0,
+            delay_max=3.0,
+            timeout=30
+        )
+        crawler.crawl_all_companies()
 
-        # 产生统计数据
         # 爬取完成后生成季度统计文件
         generate_quarterly_statistics()
     except KeyboardInterrupt:
@@ -658,5 +656,5 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"爬取过程发生错误: {e}")
     finally:
-        #crawler.close()
-        pass
+        if 'crawler' in dir():
+            crawler.close()
