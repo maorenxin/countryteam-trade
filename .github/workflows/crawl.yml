@@ -1,12 +1,16 @@
-name: Daily Crawl
+name: 每日爬取国家队持仓数据
+
 on:
   schedule:
-    - cron: '0 16 * * *'   # UTC 16:00 = 北京时间 00:00
-  workflow_dispatch:         # 支持手动触发
+    # 每天北京时间 20:00（UTC 12:00），收盘后数据已更新
+    - cron: '0 12 * * *'
+  workflow_dispatch: # 支持手动触发
 
 jobs:
   crawl:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
+
     steps:
       - uses: actions/checkout@v4
 
@@ -16,20 +20,23 @@ jobs:
 
       - name: Install Chrome
         uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-crawl.txt
 
       - name: Run crawler
         run: python crawlers/selenium_stock_crawler.py
-
-      - name: Run analysis
-        run: python analyze_holdings.py
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
-          git diff --staged --quiet || git commit -m "chore: daily crawl $(date +%Y-%m-%d)"
-          git push
+          if git diff --cached --quiet; then
+            echo "No data changes to commit"
+          else
+            git commit -m "chore: 更新持仓数据 $(date -u +%Y-%m-%d)"
+            git push
+          fi

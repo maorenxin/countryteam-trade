@@ -8,9 +8,17 @@ import plotly.express as px
 import sys, os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from lib.data_loader import get_quarter_pairs, compute_quarter_change, get_quarterly_new_counts
+from lib.data_loader import (
+    get_quarter_pairs, compute_quarter_change, get_quarterly_new_counts,
+    get_quarter_stock_counts, get_data_update_time, get_sparkline_data,
+)
 
-st.title("持仓变化总览")
+# --- 标题 + 更新时间 ---
+col_title, col_time = st.columns([3, 1])
+with col_title:
+    st.title("持仓变化总览")
+with col_time:
+    st.markdown(f"<div style='text-align:right;padding-top:28px;color:gray;font-size:14px;'>数据更新: {get_data_update_time()}</div>", unsafe_allow_html=True)
 
 # --- 季度选择器 ---
 pairs = get_quarter_pairs()
@@ -18,17 +26,22 @@ if not pairs:
     st.error("没有足够的有效季度数据")
     st.stop()
 
-pair_labels = [f"{p} → {l}" for p, l in pairs]
+stock_counts = get_quarter_stock_counts()
+pair_labels = []
+for p, l in pairs:
+    l_count = stock_counts.get(l, '?')
+    pair_labels.append(f"{p} → {l} ({l_count}只)")
+
 selected_idx = st.selectbox("选择季度对", range(len(pair_labels)), format_func=lambda i: pair_labels[i])
 prev_q, latest_q = pairs[selected_idx]
 
 # --- 计算变化 ---
 merged = compute_quarter_change(latest_q, prev_q)
+sparklines = get_sparkline_data()
 
 new_entries = merged[merged['_merge'] == 'left_only']
 exited = merged[merged['_merge'] == 'right_only']
 added = merged[(merged['流通市值变化'] > 0) & (merged['_merge'] == 'both')].sort_values('流通市值变化', ascending=False)
-# 减仓仅包含持续持有但市值下降的股票（排除退出股票）
 reduced = merged[(merged['流通市值变化'] < 0) & (merged['_merge'] == 'both')].sort_values('流通市值变化', ascending=True)
 net_amount = merged['流通市值变化'].sum() / 1e8
 add_amount = added['流通市值变化'].sum() / 1e8
@@ -44,82 +57,89 @@ c3.metric("减仓股票数", f"{len(reduced)}", delta=f"{reduce_amount:,.2f}亿"
 c4.metric("退出股票数", f"{len(exited)}", delta=f"-{exit_value:,.2f}亿")
 c5.metric("净加仓金额(亿)", f"{net_amount:,.2f}", delta=f"{net_amount:,.2f}亿", delta_color="normal")
 
-# --- 搜索框 ---
-search = st.text_input("搜索股票代码或简称", placeholder="输入代码或简称筛选...")
 
-
-def filter_df(df: pd.DataFrame, query: str) -> pd.DataFrame:
-    if not query:
-        return df
-    q = query.strip()
-    mask = df['股票代码'].astype(str).str.contains(q, na=False) | df['股票简称'].astype(str).str.contains(q, na=False)
-    return df[mask]
-
+def add_sparkline(df):
+    """给 DataFrame 添加走势列"""
+    df['国家队持仓走势'] = df['股票代码'].map(lambda c: sparklines.get(c, []))
+    return df
 
 
 # --- 加仓 TOP 表格 ---
 st.subheader("加仓 TOP", divider="green")
-added_display = filter_df(added, search).copy()
+added_display = added.copy()
 added_display['持有机构列表'] = added_display['持有机构列表'].fillna('')
-added_display['流通市值变化_num'] = added_display['流通市值变化'] / 1e8
+added_display['流通市值变化(亿)'] = added_display['流通市值变化'] / 1e8
 added_display['机构数变化_fmt'] = added_display['机构数变化'].astype(int).map('{:+d}'.format)
 added_display['当前持有机构数'] = added_display['持有机构数'].astype(int)
-
+added_display = added_display.sort_values('流通市值变化(亿)', ascending=False)
+added_display = add_sparkline(added_display)
 st.dataframe(
-    added_display[['股票代码', '股票简称', '机构数变化_fmt', '流通市值变化_num', '当前持有机构数', '持有机构列表']].rename(
-        columns={'机构数变化_fmt': '机构数变化', '流通市值变化_num': '流通市值变化(亿)'}
+    added_display[['股票代码', '股票简称', '国家队持仓走势', '机构数变化_fmt', '流通市值变化(亿)', '当前持有机构数', '持有机构列表']].rename(
+        columns={'机构数变化_fmt': '机构数变化'}
     ),
     use_container_width=True,
     hide_index=True,
     column_config={
-        '流通市值变化(亿)': st.column_config.NumberColumn(
-            '流通市值变化(亿)', format='%.2f',
-        ),
+        '流通市值变化(亿)': st.column_config.NumberColumn('流通市值变化(亿)', format='%.2f'),
+        '国家队持仓走势': st.column_config.LineChartColumn('国家队持仓走势', width='small'),
+    },
+)
+
+# --- 新进股票 ---
+st.subheader(f"新进股票 ({len(new_entries)} 只)", divider="blue")
+ne = new_entries.copy()
+ne['持有机构列表'] = ne['持有机构列表'].fillna('')
+ne['总流通市值(亿)'] = ne['总流通市值'] / 1e8
+ne['持有机构数'] = ne['持有机构数'].astype(int)
+ne = ne.sort_values('总流通市值(亿)', ascending=False)
+ne = add_sparkline(ne)
+st.dataframe(
+    ne[['股票代码', '股票简称', '国家队持仓走势', '持有机构数', '总流通市值(亿)', '持有机构列表']],
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        '总流通市值(亿)': st.column_config.NumberColumn('总流通市值(亿)', format='%.2f'),
+        '国家队持仓走势': st.column_config.LineChartColumn('国家队持仓走势', width='small'),
     },
 )
 
 # --- 减仓 TOP 表格 ---
 st.subheader("减仓 TOP", divider="red")
-reduced_display = filter_df(reduced, search).copy()
+reduced_display = reduced.copy()
 reduced_display['持有机构列表'] = reduced_display['持有机构列表'].fillna('')
-reduced_display['流通市值变化_num'] = reduced_display['流通市值变化'] / 1e8
+reduced_display['流通市值变化(亿)'] = reduced_display['流通市值变化'] / 1e8
 reduced_display['机构数变化_fmt'] = reduced_display['机构数变化'].astype(int).map('{:+d}'.format)
 reduced_display['当前持有机构数'] = reduced_display['持有机构数'].astype(int)
-
+reduced_display = reduced_display.sort_values('流通市值变化(亿)', ascending=True)
+reduced_display = add_sparkline(reduced_display)
 st.dataframe(
-    reduced_display[['股票代码', '股票简称', '机构数变化_fmt', '流通市值变化_num', '当前持有机构数', '持有机构列表']].rename(
-        columns={'机构数变化_fmt': '机构数变化', '流通市值变化_num': '流通市值变化(亿)'}
+    reduced_display[['股票代码', '股票简称', '国家队持仓走势', '机构数变化_fmt', '流通市值变化(亿)', '当前持有机构数', '持有机构列表']].rename(
+        columns={'机构数变化_fmt': '机构数变化'}
     ),
     use_container_width=True,
     hide_index=True,
     column_config={
-        '流通市值变化(亿)': st.column_config.NumberColumn(
-            '流通市值变化(亿)', format='%.2f',
-        ),
+        '流通市值变化(亿)': st.column_config.NumberColumn('流通市值变化(亿)', format='%.2f'),
+        '国家队持仓走势': st.column_config.LineChartColumn('国家队持仓走势', width='small'),
     },
 )
 
-# --- 新进/退出 折叠表格 ---
-with st.expander(f"新进股票 ({len(new_entries)} 只)", expanded=False):
-    ne = filter_df(new_entries, search).copy()
-    ne['持有机构列表'] = ne['持有机构列表'].fillna('')
-    ne['总流通市值(亿)'] = (ne['总流通市值'] / 1e8).map('{:,.2f}'.format)
-    ne['持有机构数'] = ne['持有机构数'].astype(int)
-    st.dataframe(
-        ne[['股票代码', '股票简称', '持有机构数', '总流通市值(亿)', '持有机构列表']],
-        use_container_width=True,
-        hide_index=True,
-    )
-
-with st.expander(f"退出股票 ({len(exited)} 只)", expanded=False):
-    ex = filter_df(exited, search).copy()
-    ex['上季总流通市值(亿)'] = (ex['上季总流通市值'] / 1e8).map('{:,.2f}'.format)
-    ex['上季持有机构数'] = ex['上季持有机构数'].astype(int)
-    st.dataframe(
-        ex[['股票代码', '股票简称', '上季持有机构数', '上季总流通市值(亿)']],
-        use_container_width=True,
-        hide_index=True,
-    )
+# --- 退出股票 ---
+st.subheader(f"退出股票 ({len(exited)} 只)", divider="orange")
+ex = exited.copy()
+ex['上季总流通市值(亿)'] = ex['上季总流通市值'] / 1e8
+ex['上季持有机构数'] = ex['上季持有机构数'].astype(int)
+ex = ex.sort_values('上季总流通市值(亿)', ascending=False)
+ex = add_sparkline(ex)
+st.dataframe(
+    ex[['股票代码', '股票简称', '国家队持仓走势', '上季持有机构数', '上季总流通市值(亿)']],
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        '上季总流通市值(亿)': st.column_config.NumberColumn('上季总流通市值(亿)', format='%.2f'),
+        '国家队持仓走势': st.column_config.LineChartColumn('国家队持仓走势', width='small'),
+    },
+)
 
 # --- 季度趋势图 ---
 st.divider()

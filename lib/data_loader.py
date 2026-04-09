@@ -87,10 +87,37 @@ def load_raw_data() -> pd.DataFrame:
 
 @st.cache_data
 def get_valid_quarters() -> list:
-    """返回有效季度列表（记录数 >= 200），按时间升序"""
+    """返回有效季度列表（记录数 >= 200 或最新季度有数据即包含），按时间升序"""
     df = load_raw_data()
     q_counts = df.groupby('report_q').size()
-    return sorted(q_counts[q_counts >= 200].index)
+    valid = set(q_counts[q_counts >= 200].index)
+    # 始终包含最新季度（只要有数据）
+    if len(q_counts) > 0:
+        latest_q = q_counts.index.max()
+        if latest_q not in valid and q_counts[latest_q] > 0:
+            valid.add(latest_q)
+    return sorted(valid)
+
+
+@st.cache_data
+def get_quarter_stock_counts() -> dict:
+    """返回每个季度的持仓股票数 {quarter_str: count}"""
+    df = load_raw_data()
+    counts = df.groupby('report_q')['股票代码'].nunique()
+    return {str(q): int(c) for q, c in counts.items()}
+
+
+@st.cache_data
+def get_data_update_time() -> str:
+    """返回数据文件最后修改时间（东八区，天粒度）"""
+    import datetime
+    csv_path = os.path.join(DATA_DIR, 'raw', 'selenium_country_team_stock.csv')
+    if os.path.exists(csv_path):
+        mtime = os.path.getmtime(csv_path)
+        utc_dt = datetime.datetime.fromtimestamp(mtime, tz=datetime.timezone.utc)
+        cst = utc_dt + datetime.timedelta(hours=8)
+        return cst.strftime('%Y-%m-%d')
+    return '未知'
 
 
 @st.cache_data
@@ -217,6 +244,18 @@ def get_stock_timeline(stock_code: str) -> pd.DataFrame:
     summary['report_q_str'] = summary['report_q'].astype(str)
     summary = summary.sort_values('report_q')
     return summary
+
+
+@st.cache_data
+def get_sparkline_data() -> dict:
+    """返回每只股票的季度流通市值序列 {stock_code: [v1, v2, ...]}，用于表格 sparkline"""
+    df = load_raw_data()
+    agg = df.groupby(['股票代码', 'report_q'])['流通市值'].sum().reset_index()
+    agg = agg.sort_values('report_q')
+    result = {}
+    for code, grp in agg.groupby('股票代码'):
+        result[code] = (grp['流通市值'] / 1e8).tolist()
+    return result
 
 
 @st.cache_data
