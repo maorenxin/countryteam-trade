@@ -68,13 +68,14 @@ def add_sparkline(df):
 # --- 加仓 TOP 表格 ---
 st.subheader("加仓 TOP", divider="green")
 added_display = added.copy()
+added_display['持有机构列表'] = added_display['持有机构列表'].fillna('')
 added_display['流通市值变化(亿)'] = added_display['流通市值变化'] / 1e8
 added_display['机构数变化_fmt'] = added_display['机构数变化'].astype(int).map('{:+d}'.format)
 added_display['当前持有机构数'] = added_display['持有机构数'].astype(int)
 added_display = added_display.sort_values('流通市值变化(亿)', ascending=False)
 added_display = add_sparkline(added_display)
 st.dataframe(
-    added_display[['股票代码', '股票简称', '机构数变化_fmt', '流通市值变化(亿)', '当前持有机构数', '国家队持仓走势']].rename(
+    added_display[['股票代码', '股票简称', '机构数变化_fmt', '流通市值变化(亿)', '当前持有机构数', '持有机构列表', '国家队持仓走势']].rename(
         columns={'机构数变化_fmt': '机构数变化'}
     ),
     use_container_width=True,
@@ -89,12 +90,13 @@ st.dataframe(
 # --- 新进股票 ---
 st.subheader(f"新进股票 ({len(new_entries)} 只)", divider="blue")
 ne = new_entries.copy()
+ne['持有机构列表'] = ne['持有机构列表'].fillna('')
 ne['总流通市值(亿)'] = ne['总流通市值'] / 1e8
 ne['持有机构数'] = ne['持有机构数'].astype(int)
 ne = ne.sort_values('总流通市值(亿)', ascending=False)
 ne = add_sparkline(ne)
 st.dataframe(
-    ne[['股票代码', '股票简称', '持有机构数', '总流通市值(亿)', '国家队持仓走势']],
+    ne[['股票代码', '股票简称', '持有机构数', '总流通市值(亿)', '持有机构列表', '国家队持仓走势']],
     use_container_width=True,
     hide_index=True,
     height=400,
@@ -107,13 +109,14 @@ st.dataframe(
 # --- 减仓 TOP 表格 ---
 st.subheader("减仓 TOP", divider="red")
 reduced_display = reduced.copy()
+reduced_display['持有机构列表'] = reduced_display['持有机构列表'].fillna('')
 reduced_display['流通市值变化(亿)'] = reduced_display['流通市值变化'] / 1e8
 reduced_display['机构数变化_fmt'] = reduced_display['机构数变化'].astype(int).map('{:+d}'.format)
 reduced_display['当前持有机构数'] = reduced_display['持有机构数'].astype(int)
 reduced_display = reduced_display.sort_values('流通市值变化(亿)', ascending=True)
 reduced_display = add_sparkline(reduced_display)
 st.dataframe(
-    reduced_display[['股票代码', '股票简称', '机构数变化_fmt', '流通市值变化(亿)', '当前持有机构数', '国家队持仓走势']].rename(
+    reduced_display[['股票代码', '股票简称', '机构数变化_fmt', '流通市值变化(亿)', '当前持有机构数', '持有机构列表', '国家队持仓走势']].rename(
         columns={'机构数变化_fmt': '机构数变化'}
     ),
     use_container_width=True,
