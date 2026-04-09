@@ -34,8 +34,8 @@ if inst_list.empty:
 
 inst_options = []
 for _, row in inst_list.iterrows():
-    label = f"{row['股东名称']}（{row['总流通市值']/1e8:,.2f}亿，{int(row['持仓股票数'])}只）"
-    inst_options.append((row['股东名称'], label))
+    label = f"{row['股东别称']}（{row['总流通市值']/1e8:,.2f}亿，{int(row['持仓股票数'])}只）"
+    inst_options.append((row['股东别称'], label))
 
 selected_inst = st.selectbox(
     "选择机构",

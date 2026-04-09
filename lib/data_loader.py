@@ -54,6 +54,16 @@ INDUSTRY_MAPPING = {
 }
 
 
+@st.cache_data
+def load_alias_map() -> dict:
+    """读取股东别称映射：{股东代码: 别称}"""
+    alias_path = os.path.join(DATA_DIR, 'config', 'shareholder_alias.csv')
+    if not os.path.exists(alias_path):
+        return {}
+    alias_df = pd.read_csv(alias_path, dtype={'股东代码': str})
+    return dict(zip(alias_df['股东代码'], alias_df['别称']))
+
+
 def _resolve_industry_name(code) -> str:
     """根据行业代码解析行业名称，优先匹配完整代码，逐级回退"""
     if pd.isna(code):
@@ -82,6 +92,9 @@ def load_raw_data() -> pd.DataFrame:
         df.sort_values(['股东代码', '股票代码', '报告期'], ascending=[True, True, False])
           .drop_duplicates(subset=['股东代码', '股票代码', 'report_q'], keep='first')
     )
+    alias_map = load_alias_map()
+    df['股东代码'] = df['股东代码'].astype(str)
+    df['股东别称'] = df['股东代码'].map(alias_map).fillna(df['股东名称'])
     return df
 
 
@@ -131,14 +144,14 @@ def compute_quarter_change(latest_q_str: str, prev_q_str: str) -> pd.DataFrame:
     prev = df[df['report_q'] == prev_q]
 
     latest_summary = latest.groupby(['股票代码', '股票简称']).agg(
-        持有机构数=('股东名称', 'nunique'),
-        持有机构列表=('股东名称', lambda x: '、'.join(x.unique())),
+        持有机构数=('股东别称', 'nunique'),
+        持有机构列表=('股东别称', lambda x: '、'.join(x.unique())),
         总持仓数量=('数量', 'sum'),
         总流通市值=('流通市值', 'sum'),
     ).reset_index()
 
     prev_summary = prev.groupby(['股票代码', '股票简称']).agg(
-        上季持有机构数=('股东名称', 'nunique'),
+        上季持有机构数=('股东别称', 'nunique'),
         上季总持仓数量=('数量', 'sum'),
         上季总流通市值=('流通市值', 'sum'),
     ).reset_index()
@@ -203,7 +216,7 @@ def get_quarterly_new_counts() -> tuple[pd.DataFrame, pd.DataFrame]:
     report_counts = df.groupby('report_q').agg(
         持仓记录数=('股票代码', 'count'),
         持仓股票数=('股票代码', 'nunique'),
-        持仓机构数=('股东名称', 'nunique'),
+        持仓机构数=('股东别称', 'nunique'),
     ).reset_index()
     report_counts['季度'] = report_counts['report_q'].astype(str)
     report_counts = report_counts.sort_values('report_q')
@@ -212,7 +225,7 @@ def get_quarterly_new_counts() -> tuple[pd.DataFrame, pd.DataFrame]:
     announce_counts = df.groupby('announce_q').agg(
         持仓记录数=('股票代码', 'count'),
         持仓股票数=('股票代码', 'nunique'),
-        持仓机构数=('股东名称', 'nunique'),
+        持仓机构数=('股东别称', 'nunique'),
     ).reset_index()
     announce_counts['季度'] = announce_counts['announce_q'].astype(str)
     announce_counts = announce_counts.sort_values('announce_q')
@@ -239,7 +252,7 @@ def get_stock_timeline(stock_code: str) -> pd.DataFrame:
     summary = stock_df.groupby('report_q').agg(
         总流通市值=('流通市值', 'sum'),
         总持仓数量=('数量', 'sum'),
-        持有机构数=('股东名称', 'nunique'),
+        持有机构数=('股东别称', 'nunique'),
     ).reset_index()
     summary['report_q_str'] = summary['report_q'].astype(str)
     summary = summary.sort_values('report_q')
@@ -283,7 +296,7 @@ def get_institution_list(quarter_str: str) -> pd.DataFrame:
     df = load_raw_data()
     q = pd.Period(quarter_str, freq='Q')
     q_df = df[df['report_q'] == q]
-    summary = q_df.groupby(['股东代码', '股东名称']).agg(
+    summary = q_df.groupby(['股东代码', '股东别称']).agg(
         持仓股票数=('股票代码', 'nunique'),
         总流通市值=('流通市值', 'sum'),
     ).reset_index()
@@ -295,7 +308,7 @@ def get_institution_holdings(institution_name: str, quarter_str: str) -> pd.Data
     """获取指定机构在指定季度的持仓列表"""
     df = load_raw_data()
     q = pd.Period(quarter_str, freq='Q')
-    mask = (df['report_q'] == q) & (df['股东名称'] == institution_name)
+    mask = (df['report_q'] == q) & (df['股东别称'] == institution_name)
     holdings = df[mask][['股票代码', '股票简称', '数量', '流通市值', '报告期']].copy()
     return holdings.sort_values('流通市值', ascending=False)
 
@@ -307,8 +320,8 @@ def get_institution_change(institution_name: str, latest_q_str: str, prev_q_str:
     latest_q = pd.Period(latest_q_str, freq='Q')
     prev_q = pd.Period(prev_q_str, freq='Q')
 
-    latest = df[(df['report_q'] == latest_q) & (df['股东名称'] == institution_name)]
-    prev = df[(df['report_q'] == prev_q) & (df['股东名称'] == institution_name)]
+    latest = df[(df['report_q'] == latest_q) & (df['股东别称'] == institution_name)]
+    prev = df[(df['report_q'] == prev_q) & (df['股东别称'] == institution_name)]
 
     l_agg = latest.groupby(['股票代码', '股票简称']).agg(
         本季数量=('数量', 'sum'), 本季市值=('流通市值', 'sum'),
