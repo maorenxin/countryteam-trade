@@ -66,7 +66,7 @@ st.plotly_chart(fig_line, use_container_width=True)
 # --- 机构堆叠柱状图 ---
 detail = get_stock_institution_detail(stock_code)
 if not detail.empty:
-    inst_q = detail.groupby(['report_q_str', '股东名称']).agg(
+    inst_q = detail.groupby(['report_q_str', '股东别称']).agg(
         流通市值=('流通市值', 'sum'),
     ).reset_index()
     inst_q['流通市值_亿'] = inst_q['流通市值'] / 1e8
@@ -75,8 +75,8 @@ if not detail.empty:
         inst_q.sort_values('report_q_str'),
         x='report_q_str',
         y='流通市值_亿',
-        color='股东名称',
-        labels={'report_q_str': '季度', '流通市值_亿': '流通市值(亿)', '股东名称': '机构'},
+        color='股东别称',
+        labels={'report_q_str': '季度', '流通市值_亿': '流通市值(亿)', '股东别称': '机构'},
         title='持有机构变化',
     )
     fig_bar.update_yaxes(tickformat=',.2f')
@@ -85,12 +85,12 @@ if not detail.empty:
 
 # --- 持仓明细表 ---
 st.subheader("持仓明细")
-detail_table = detail[['report_q_str', '股东名称', '数量', '流通市值']].copy()
+detail_table = detail[['report_q_str', '股东别称', '数量', '流通市值']].copy()
 detail_table['流通市值(亿)'] = (detail_table['流通市值'] / 1e8).map('{:,.2f}'.format)
 detail_table['数量(万股)'] = (detail_table['数量'] / 1e4).map('{:,.2f}'.format)
 st.dataframe(
-    detail_table[['report_q_str', '股东名称', '数量(万股)', '流通市值(亿)']].rename(
-        columns={'report_q_str': '季度'}
+    detail_table[['report_q_str', '股东别称', '数量(万股)', '流通市值(亿)']].rename(
+        columns={'report_q_str': '季度', '股东别称': '机构'}
     ),
     use_container_width=True,
     hide_index=True,
