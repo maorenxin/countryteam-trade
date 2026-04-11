@@ -103,6 +103,9 @@ def get_valid_quarters() -> list:
     """返回有效季度列表（记录数 >= 200 或最新季度有数据即包含），按时间升序"""
     df = load_raw_data()
     q_counts = df.groupby('report_q').size()
+    # 排除季末尚未到来的季度（非季末报告期被 to_period 映射到未来季度）
+    today = pd.Timestamp.now()
+    q_counts = q_counts[q_counts.index.map(lambda q: q.end_time <= today)]
     valid = set(q_counts[q_counts >= 200].index)
     # 始终包含最新季度（只要有数据）
     if len(q_counts) > 0:
