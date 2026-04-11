@@ -566,7 +566,11 @@ def generate_quarterly_statistics(data_file: str = os.path.join(PROJECT_ROOT, 'd
     """
     try:
         logger.info(f"开始生成季度统计文件，数据源: {data_file}")
-        
+
+        # 确保输出目录存在
+        os.makedirs(os.path.dirname(share_output_file), exist_ok=True)
+        os.makedirs(os.path.dirname(announce_output_file), exist_ok=True)
+
         # 读取数据文件
         if not os.path.exists(data_file):
             logger.error(f"数据文件不存在: {data_file}")
