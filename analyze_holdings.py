@@ -17,10 +17,6 @@ df = pd.read_csv(
 )
 df = df.dropna(subset=['公告日', '报告期'])
 
-# 只保留季末报告期（季报数据），排除中途持仓变动公告
-quarter_end_mmdd = {'03-31', '06-30', '09-30', '12-31'}
-df = df[df['报告期'].dt.strftime('%m-%d').isin(quarter_end_mmdd)]
-
 # 对齐到季度
 df['report_q'] = df['报告期'].dt.to_period('Q')
 
