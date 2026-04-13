@@ -10,7 +10,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.data_loader import (
     get_valid_quarters, get_quarter_pairs, compute_quarter_change,
-    load_industry_map,
+    load_industry_map, is_quarter_complete,
 )
 
 st.title("季度全景")
@@ -27,6 +27,10 @@ prev_q, latest_q = pairs[selected_idx]
 
 # --- 计算变化并关联行业 ---
 merged = compute_quarter_change(latest_q, prev_q)
+latest_complete = is_quarter_complete(latest_q)
+if not latest_complete:
+    st.info(f"{latest_q} 季报尚未完整披露，仅展示已披露持仓的变化。")
+    merged = merged[merged['_merge'] != 'right_only']
 industry_map = load_industry_map()
 merged = merged.merge(industry_map, on='股票代码', how='left')
 merged['行业'] = merged['行业'].fillna('未知行业')

@@ -12,6 +12,7 @@ from lib.data_loader import (
     get_quarter_pairs,
     get_institution_list, get_institution_holdings,
     get_institution_change, load_industry_map,
+    is_quarter_complete,
 )
 
 st.title("国家队一览")
@@ -25,6 +26,9 @@ if not pairs:
 pair_labels = [f"{p} → {l}" for p, l in pairs]
 selected_idx = st.selectbox("选择季度对", range(len(pair_labels)), format_func=lambda i: pair_labels[i])
 prev_q, latest_q = pairs[selected_idx]
+
+if not is_quarter_complete(latest_q):
+    st.info(f"{latest_q} 季报尚未完整披露，部分机构持仓数据可能缺失。")
 
 # --- 机构列表 ---
 inst_list = get_institution_list(latest_q)

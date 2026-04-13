@@ -17,6 +17,10 @@ df = pd.read_csv(
 )
 df = df.dropna(subset=['公告日', '报告期'])
 
+# 只保留季末报告期（季报数据），排除中途持仓变动公告
+quarter_end_mmdd = {'03-31', '06-30', '09-30', '12-31'}
+df = df[df['报告期'].dt.strftime('%m-%d').isin(quarter_end_mmdd)]
+
 # 对齐到季度
 df['report_q'] = df['报告期'].dt.to_period('Q')
 
@@ -26,11 +30,14 @@ df = (
       .drop_duplicates(subset=['股东代码', '股票代码', 'report_q'], keep='first')
 )
 
-# 找出数据完整的最近两个季度（排除记录数过少的季度）
+# 找出有数据的季度（排除季末未到的）
 q_counts = df.groupby('report_q').size()
-valid_quarters = sorted(q_counts[q_counts >= 200].index)
+today = pd.Timestamp.now()
+q_counts = q_counts[q_counts.index.map(lambda q: q.end_time <= today)]
+valid_quarters = sorted(q_counts.index)
 latest_q = valid_quarters[-1]
 prev_q = valid_quarters[-2] if len(valid_quarters) >= 2 else None
+latest_complete = q_counts[latest_q] >= 200
 
 print(f"最新季度: {latest_q}")
 print(f"上一季度: {prev_q}")
@@ -71,14 +78,18 @@ if not prev.empty:
     merged['流通市值变化'] = merged['总流通市值'] - merged['上季总流通市值']
     merged['流通市值变化_亿'] = merged['流通市值变化'] / 1e8
 
-    # 加仓 = 流通市值增加的
-    added = merged[merged['流通市值变化'] > 0].sort_values('流通市值变化', ascending=False).copy()
+    # 加仓 = 两季都有且流通市值增加
+    added = merged[(merged['流通市值变化'] > 0) & (merged['_merge'] == 'both')].sort_values('流通市值变化', ascending=False).copy()
     # 新进 = 上季度不存在的
     new_entries = merged[merged['_merge'] == 'left_only'].sort_values('总流通市值', ascending=False).copy()
-    # 减仓
-    reduced = merged[merged['流通市值变化'] < 0].sort_values('流通市值变化', ascending=True).copy()
-    # 退出
-    exited = merged[merged['_merge'] == 'right_only'].sort_values('上季总流通市值', ascending=False).copy()
+    # 减仓 = 两季都有且流通市值减少
+    reduced = merged[(merged['流通市值变化'] < 0) & (merged['_merge'] == 'both')].sort_values('流通市值变化', ascending=True).copy()
+    # 退出 / 未披露
+    right_only = merged[merged['_merge'] == 'right_only'].sort_values('上季总流通市值', ascending=False).copy()
+    if latest_complete:
+        exited = right_only
+    else:
+        exited = pd.DataFrame(columns=merged.columns)
 
     # 输出CSV
     output_dir = os.path.join(DATA_DIR, 'processed')
@@ -87,6 +98,8 @@ if not prev.empty:
     # === 打印分析结果 ===
     print(f"{'='*80}")
     print(f"国家队持仓变化分析: {prev_q} → {latest_q}")
+    if not latest_complete:
+        print(f"[注意] {latest_q} 季报尚未完整披露，仅展示已披露持仓的变化")
     print(f"{'='*80}")
 
     print(f"\n## 新进股票 ({len(new_entries)} 只)")
@@ -107,11 +120,14 @@ if not prev.empty:
     for _, row in reduced.head(20).iterrows():
         print(f"{row['股票代码']:<10} {row['股票简称']:<10} {int(row['机构数变化']):>+8} {row['流通市值变化']/1e8:>16.2f}")
 
-    print(f"\n## 退出股票 ({len(exited)} 只)")
-    print(f"{'股票代码':<10} {'股票简称':<10} {'上季机构数':>8} {'上季流通市值(亿)':>16}")
-    print('-' * 60)
-    for _, row in exited.head(20).iterrows():
-        print(f"{row['股票代码']:<10} {row['股票简称']:<10} {int(row['上季持有机构数']):>8} {row['上季总流通市值']/1e8:>16.2f}")
+    if latest_complete:
+        print(f"\n## 退出股票 ({len(exited)} 只)")
+        print(f"{'股票代码':<10} {'股票简称':<10} {'上季机构数':>8} {'上季流通市值(亿)':>16}")
+        print('-' * 60)
+        for _, row in exited.head(20).iterrows():
+            print(f"{row['股票代码']:<10} {row['股票简称']:<10} {int(row['上季持有机构数']):>8} {row['上季总流通市值']/1e8:>16.2f}")
+    else:
+        print(f"\n## 未披露股票 ({len(right_only)} 只，季报更新中，不计入退出)")
 
     # 汇总
     print(f"\n{'='*80}")
@@ -120,6 +136,9 @@ if not prev.empty:
     print(f"  新进: {len(new_entries)} 只")
     print(f"  加仓: {len(added)} 只, 合计加仓 {added['流通市值变化'].sum()/1e8:.2f} 亿")
     print(f"  减仓: {len(reduced)} 只, 合计减仓 {reduced['流通市值变化'].sum()/1e8:.2f} 亿")
-    print(f"  退出: {len(exited)} 只")
+    if latest_complete:
+        print(f"  退出: {len(exited)} 只")
+    else:
+        print(f"  未披露: {len(right_only)} 只（待季报更新）")
 else:
     print("只有一个季度的数据，无法比较变化")

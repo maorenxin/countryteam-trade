@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.data_loader import (
     get_quarter_pairs, compute_quarter_change, get_quarterly_new_counts,
     get_quarter_stock_counts, get_data_update_time, get_sparkline_data,
+    is_quarter_complete,
 )
 
 # --- 标题 + 更新时间 ---
@@ -38,16 +39,28 @@ prev_q, latest_q = pairs[selected_idx]
 # --- 计算变化 ---
 merged = compute_quarter_change(latest_q, prev_q)
 sparklines = get_sparkline_data()
+latest_complete = is_quarter_complete(latest_q)
+
+if not latest_complete:
+    st.info(f"{latest_q} 季报尚未完整披露，仅展示已披露持仓的变化，未披露股票不计入退出。")
 
 new_entries = merged[merged['_merge'] == 'left_only']
-exited = merged[merged['_merge'] == 'right_only']
+right_only = merged[merged['_merge'] == 'right_only']
 added = merged[(merged['流通市值变化'] > 0) & (merged['_merge'] == 'both')].sort_values('流通市值变化', ascending=False)
 reduced = merged[(merged['流通市值变化'] < 0) & (merged['_merge'] == 'both')].sort_values('流通市值变化', ascending=True)
-net_amount = merged['流通市值变化'].sum() / 1e8
 add_amount = added['流通市值变化'].sum() / 1e8
 reduce_amount = reduced['流通市值变化'].sum() / 1e8
-exit_value = exited['上季总流通市值'].sum() / 1e8
 new_value = new_entries['总流通市值'].sum() / 1e8
+
+if latest_complete:
+    exited = right_only
+    exit_value = exited['上季总流通市值'].sum() / 1e8
+    net_amount = merged['流通市值变化'].sum() / 1e8
+else:
+    exited = pd.DataFrame(columns=merged.columns)
+    exit_value = 0
+    # 不完整季度：净加仓只算已披露部分（排除 right_only 的虚假减值）
+    net_amount = merged[merged['_merge'] != 'right_only']['流通市值变化'].sum() / 1e8
 
 # --- KPI 卡片（3+2 布局，手机端更友好）---
 c1, c2, c3 = st.columns(3)
@@ -55,7 +68,10 @@ c1.metric("新进股票数", f"{len(new_entries)}", delta=f"+{new_value:,.2f}亿
 c2.metric("加仓股票数", f"{len(added)}", delta=f"+{add_amount:,.2f}亿")
 c3.metric("减仓股票数", f"{len(reduced)}", delta=f"{reduce_amount:,.2f}亿")
 c4, c5, _ = st.columns(3)
-c4.metric("退出股票数", f"{len(exited)}", delta=f"-{exit_value:,.2f}亿")
+if latest_complete:
+    c4.metric("退出股票数", f"{len(exited)}", delta=f"-{exit_value:,.2f}亿")
+else:
+    c4.metric("未披露股票数", f"{len(right_only)}", delta="季报更新中", delta_color="off")
 c5.metric("净加仓金额(亿)", f"{net_amount:,.2f}", delta=f"{net_amount:,.2f}亿", delta_color="normal")
 
 
@@ -128,23 +144,42 @@ st.dataframe(
     },
 )
 
-# --- 退出股票 ---
-st.subheader(f"退出股票 ({len(exited)} 只)", divider="orange")
-ex = exited.copy()
-ex['上季总流通市值(亿)'] = ex['上季总流通市值'] / 1e8
-ex['上季持有机构数'] = ex['上季持有机构数'].astype(int)
-ex = ex.sort_values('上季总流通市值(亿)', ascending=False)
-ex = add_sparkline(ex)
-st.dataframe(
-    ex[['股票代码', '股票简称', '上季持有机构数', '上季总流通市值(亿)', '国家队持仓走势']],
-    use_container_width=True,
-    hide_index=True,
-    height=400,
-    column_config={
-        '上季总流通市值(亿)': st.column_config.NumberColumn('上季总流通市值(亿)', format='%.2f'),
-        '国家队持仓走势': st.column_config.LineChartColumn('国家队持仓走势', width='small'),
-    },
-)
+# --- 退出/未披露股票 ---
+if latest_complete:
+    st.subheader(f"退出股票 ({len(exited)} 只)", divider="orange")
+    ex = exited.copy()
+    ex['上季总流通市值(亿)'] = ex['上季总流通市值'] / 1e8
+    ex['上季持有机构数'] = ex['上季持有机构数'].astype(int)
+    ex = ex.sort_values('上季总流通市值(亿)', ascending=False)
+    ex = add_sparkline(ex)
+    st.dataframe(
+        ex[['股票代码', '股票简称', '上季持有机构数', '上季总流通市值(亿)', '国家队持仓走势']],
+        use_container_width=True,
+        hide_index=True,
+        height=400,
+        column_config={
+            '上季总流通市值(亿)': st.column_config.NumberColumn('上季总流通市值(亿)', format='%.2f'),
+            '国家队持仓走势': st.column_config.LineChartColumn('国家队持仓走势', width='small'),
+        },
+    )
+else:
+    st.subheader(f"未披露股票 ({len(right_only)} 只)", divider="gray")
+    st.caption("以下股票上季度有持仓，但本季度尚未披露季报，待后续更新。")
+    uo = right_only.copy()
+    uo['上季总流通市值(亿)'] = uo['上季总流通市值'] / 1e8
+    uo['上季持有机构数'] = uo['上季持有机构数'].astype(int)
+    uo = uo.sort_values('上季总流通市值(亿)', ascending=False)
+    uo = add_sparkline(uo)
+    st.dataframe(
+        uo[['股票代码', '股票简称', '上季持有机构数', '上季总流通市值(亿)', '国家队持仓走势']],
+        use_container_width=True,
+        hide_index=True,
+        height=400,
+        column_config={
+            '上季总流通市值(亿)': st.column_config.NumberColumn('上季总流通市值(亿)', format='%.2f'),
+            '国家队持仓走势': st.column_config.LineChartColumn('国家队持仓走势', width='small'),
+        },
+    )
 
 # --- 季度趋势图（上下排列，手机端友好）---
 st.divider()
@@ -171,3 +206,11 @@ fig_announce = px.bar(
 fig_announce.update_traces(textposition='outside', textfont_size=9)
 fig_announce.update_layout(xaxis_tickangle=-45, height=400, margin=dict(t=40, b=80))
 st.plotly_chart(fig_announce, use_container_width=True)
+
+# --- 数据来源脚注 ---
+st.divider()
+st.caption(
+    "数据来源：持仓数据来自[东方财富网股东明细](https://data.eastmoney.com/gdfx/)，"
+    "行业分类来自[理杏仁](https://www.lixinger.com/)及[AkShare](https://akshare.akfamily.xyz/)（申万行业体系），"
+    "日K线数据来自[东方财富行情接口](https://quote.eastmoney.com/)。"
+)

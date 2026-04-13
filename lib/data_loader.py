@@ -87,6 +87,9 @@ def load_raw_data() -> pd.DataFrame:
         parse_dates=['公告日', '报告期'],
     )
     df = df.dropna(subset=['公告日', '报告期'])
+    # 只保留季末报告期（季报数据），排除中途持仓变动公告
+    quarter_end_mmdd = {'03-31', '06-30', '09-30', '12-31'}
+    df = df[df['报告期'].dt.strftime('%m-%d').isin(quarter_end_mmdd)]
     df['report_q'] = df['报告期'].dt.to_period('Q')
     df = (
         df.sort_values(['股东代码', '股票代码', '报告期'], ascending=[True, True, False])
@@ -100,19 +103,21 @@ def load_raw_data() -> pd.DataFrame:
 
 @st.cache_data
 def get_valid_quarters() -> list:
-    """返回有效季度列表（记录数 >= 200 或最新季度有数据即包含），按时间升序"""
+    """返回有效季度列表（有数据且季末已过），按时间升序"""
     df = load_raw_data()
     q_counts = df.groupby('report_q').size()
-    # 排除季末尚未到来的季度（非季末报告期被 to_period 映射到未来季度）
+    # 排除季末尚未到来的季度
     today = pd.Timestamp.now()
     q_counts = q_counts[q_counts.index.map(lambda q: q.end_time <= today)]
-    valid = set(q_counts[q_counts >= 200].index)
-    # 始终包含最新季度（只要有数据）
-    if len(q_counts) > 0:
-        latest_q = q_counts.index.max()
-        if latest_q not in valid and q_counts[latest_q] > 0:
-            valid.add(latest_q)
-    return sorted(valid)
+    return sorted(q_counts.index)
+
+
+@st.cache_data
+def is_quarter_complete(quarter_str: str) -> bool:
+    """判断某季度数据是否披露充分（>= 200 条记录视为完整）"""
+    df = load_raw_data()
+    q = pd.Period(quarter_str, freq='Q')
+    return len(df[df['report_q'] == q]) >= 200
 
 
 @st.cache_data
