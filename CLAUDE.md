@@ -35,7 +35,7 @@ backtest/                        # 回测相关
   run_shareholder_backtest.py    # Backtrader 回测引擎
 data/
   config/                        # 输入配置（纳入git）
-    stock_holder.csv             # 112个股东实体及URL
+    stock_holder.csv             # 197个股东实体及URL（含86个基本养老保险基金组合）
   raw/                           # 原始爬取数据（git忽略）
     selenium_country_team_stock.csv
     国家队持股_清洗.csv
@@ -53,7 +53,7 @@ data/
 ## 数据流
 
 ```
-data/config/stock_holder.csv (112个股东实体及URL)
+data/config/stock_holder.csv (197个股东实体及URL)
     → crawlers/selenium_stock_crawler.py (Selenium爬虫)
     → data/raw/selenium_country_team_stock.csv (原始持仓，~6万行)
     → generate_quarterly_statistics() 数据清洗 + 季度透视表
