@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""国家队持仓追踪看板 — Streamlit 主入口"""
+"""国家队持仓追踪看板 — Streamlit 主入口（含基本养老保险基金组合）"""
 
 import streamlit as st
 
