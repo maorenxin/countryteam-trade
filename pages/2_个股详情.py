@@ -70,6 +70,7 @@ if not detail.empty:
         流通市值=('流通市值', 'sum'),
     ).reset_index()
     inst_q['流通市值_亿'] = inst_q['流通市值'] / 1e8
+    sorted_quarters = sorted(inst_q['report_q_str'].unique())
 
     fig_bar = px.bar(
         inst_q.sort_values('report_q_str'),
@@ -78,6 +79,7 @@ if not detail.empty:
         color='股东别称',
         labels={'report_q_str': '季度', '流通市值_亿': '流通市值(亿)', '股东别称': '机构'},
         title='持有机构变化',
+        category_orders={'report_q_str': sorted_quarters},
     )
     fig_bar.update_yaxes(tickformat=',.2f')
     fig_bar.update_layout(barmode='stack', legend=dict(orientation='h', y=-0.3))
@@ -86,6 +88,7 @@ if not detail.empty:
 # --- 持仓明细表 ---
 st.subheader("持仓明细")
 detail_table = detail[['report_q_str', '股东别称', '数量', '流通市值']].copy()
+detail_table = detail_table.sort_values('report_q_str', ascending=True)
 detail_table['流通市值(亿)'] = (detail_table['流通市值'] / 1e8).map('{:,.2f}'.format)
 detail_table['数量(万股)'] = (detail_table['数量'] / 1e4).map('{:,.2f}'.format)
 st.dataframe(
